@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
+	"sort"
 )
 
 type job func(in, out chan interface{})
@@ -57,4 +59,36 @@ var DataSignerCrc32 = func(data string) string {
 	dataHash := strconv.FormatUint(uint64(crcH), 10)
 	time.Sleep(time.Second)
 	return dataHash
+}
+
+var SingleHash = func(in, out chan interface{}) {
+	for data := range in {
+		dataStr := fmt.Sprintf("%v", data)
+		dataHash := DataSignerCrc32(dataStr) + "~" + DataSignerCrc32(DataSignerMd5(dataStr))
+		fmt.Printf("SingleHash, value: %v\t hash: %v\n", data, dataHash)
+		out <- dataHash
+	}
+}
+
+var MultiHash = func(in, out chan interface{}) {
+	for data := range in {
+		var resHash string
+		dataStr := fmt.Sprintf("%v", data)
+		for i := 0; i < 6; i++ {
+			datHash := DataSignerCrc32(fmt.Sprintf("%d%s", i, dataStr))
+			resHash += datHash
+		}
+		fmt.Printf("MultiHash, value: %s\t hash: %v\n", data, resHash)
+		out <- resHash
+	}
+}
+
+var CombineResults = func(in, out chan interface{}) {
+	var resHash []string
+	for data := range in {
+		dataStr := fmt.Sprintf("%v", data)
+		resHash = append(resHash, dataStr)
+	}
+	sort.Strings(resHash)
+	out <- strings.Join(resHash, "_")
 }
